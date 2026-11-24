@@ -80,6 +80,21 @@ export async function listBooks(): Promise<BookSummary[]> {
   return out.sort((a, b) => a.order - b.order)
 }
 
+/** Item pictures from the books, kept once for all of them (icons/<file>). */
+export async function saveIcons(icons: Map<string, Blob>) {
+  const db = await open()
+  const tx = db.transaction('images', 'readwrite')
+  const store = tx.objectStore('images')
+  for (const [name, blob] of icons) store.put(blob, `icons/${name}`)
+  await done(tx)
+}
+
+/** The first of these item pictures that's on the device. */
+export async function iconUrl(files: string[]): Promise<string | null> {
+  for (const f of files) { const u = await imageUrl('icons', f); if (u) return u }
+  return null
+}
+
 const urlCache = new Map<string, string>()
 export async function imageUrl(bookId: string, file: string): Promise<string | null> {
   const key = `${bookId}/${file}`

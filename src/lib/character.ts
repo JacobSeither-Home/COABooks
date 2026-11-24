@@ -131,13 +131,13 @@ export function enterSection(c: Character, to: string): { char: Character; heale
 }
 
 /** Start a book: full ENDURANCE and WILLPOWER, healing count reset, a copy kept for restarting. */
-export function beginBook(c: Character, bookId: string): Character {
+export function beginBook(c: Character, bookId: string, hasOpening = true): Character {
   const era = eraOf(bookId)
   const s: CharState = { ...c.state, era: era.id, healed: 0, fought: false }
   s.ep = maxEp(s)
   if (s.wpBase != null) s.wp = maxWp(s)
   for (const k of era.counters) s.counters[k.id] ??= 0
-  return { ...c, book: bookId, section: '1', history: ['1'], dead: false, state: s, start: structuredClone(s) }
+  return { ...c, book: bookId, section: hasOpening ? 'intro' : '1', history: hasOpening ? [] : ['1'], dead: false, state: s, start: structuredClone(s) }
 }
 
 export function itemCount(s: CharState) {

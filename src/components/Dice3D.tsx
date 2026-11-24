@@ -57,9 +57,19 @@ function buildDie() {
     // Text runs from the far vertex toward the apex.
     const up = new THREE.Vector3().subVectors(k[0], k[2]).projectOnPlane(n).normalize()
     const right = new THREE.Vector3().crossVectors(up, n).normalize()
-    const pts2 = k.map((v) => { const d = new THREE.Vector3().subVectors(v, centre); return [d.dot(right), d.dot(up)] })
-    const span = Math.max(...pts2.map((p) => Math.max(Math.abs(p[0]), Math.abs(p[1])))) * 2
-    const uv = pts2.map(([x, y]) => [0.5 + x / span, 0.5 + y / span + 0.06])
+    const raw = k.map((v) => { const d = new THREE.Vector3().subVectors(v, centre); return [d.dot(right), d.dot(up)] })
+    // Area centroid of the kite: where the eye reads its middle.
+    let A = 0, cx = 0, cy = 0
+    for (let j = 0; j < raw.length; j++) {
+      const [x0, y0] = raw[j], [x1, y1] = raw[(j + 1) % raw.length]
+      const cr = x0 * y1 - x1 * y0
+      A += cr; cx += (x0 + x1) * cr; cy += (y0 + y1) * cr
+    }
+    A /= 2; cx /= 6 * A; cy /= 6 * A
+    const pts2 = raw.map(([x, y]) => [x - cx, y - cy])
+    // Scale so the number fits the kite's narrower width at its centre.
+    const span = Math.max(...pts2.map((p) => Math.abs(p[0]))) * 2.35
+    const uv = pts2.map(([x, y]) => [0.5 + x / span, 0.5 + y / span])
     const g = new THREE.BufferGeometry()
     const tri = [0, 1, 2, 0, 2, 3]
     g.setAttribute('position', new THREE.Float32BufferAttribute(tri.flatMap((j) => k[j].toArray()), 3))
@@ -79,10 +89,14 @@ function numberTexture(n: number) {
   grad.addColorStop(0, '#fbf3df'); grad.addColorStop(1, '#e6d6b2')
   g.fillStyle = grad; g.fillRect(0, 0, 128, 128)
   g.fillStyle = '#7c1f19'
-  g.font = 'bold 62px "Iowan Old Style", Palatino, Georgia, serif'
-  g.textAlign = 'center'; g.textBaseline = 'middle'
-  g.fillText(String(n), 64, 66)
-  if (n === 6 || n === 9) g.fillRect(48, 96, 32, 5)
+  g.font = 'bold 60px "Iowan Old Style", Palatino, Georgia, serif'
+  g.textAlign = 'center'; g.textBaseline = 'alphabetic'
+  const m = g.measureText(String(n))
+  const under = n === 6 || n === 9 ? 9 : 0
+  // Centre the ink itself (plus the underline on 6 and 9), not the font's line box.
+  const base = 64 + (m.actualBoundingBoxAscent - m.actualBoundingBoxDescent) / 2 - under / 2
+  g.fillText(String(n), 64, base)
+  if (under) g.fillRect(50, base + 5, 28, 4)
   const t = new THREE.CanvasTexture(c)
   t.colorSpace = THREE.SRGBColorSpace
   t.anisotropy = 4

@@ -1,7 +1,8 @@
 // The Action Chart: every score, ability and item, editable, with the series' carrying limits shown.
 import { useState } from 'react'
-import { abilityNames, baseCs, itemCount, maxEp, maxWp, type Bonus, type Character, type CharState, type Item } from '../lib/character'
+import { abilityNames, baseCs, maxEp, maxWp, type Bonus, type Character, type CharState } from '../lib/character'
 import { ERAS, eraOf } from '../lib/rules/eras'
+import Inventory from './Inventory'
 
 interface Props { char: Character; onChange: (c: Character) => void; abilities?: string[] }
 
@@ -9,7 +10,6 @@ export default function ActionChart({ char, onChange, abilities = [] }: Props) {
   const s = char.state
   const era = eraOf(char.book)
   const set = (patch: Partial<CharState>) => onChange({ ...char, state: { ...s, ...patch } })
-  const counts = itemCount(s)
   const statLabel = (id: string) => era.stats.find((x) => x.id === id)?.label ?? id
 
   return (
@@ -54,16 +54,13 @@ export default function ActionChart({ char, onChange, abilities = [] }: Props) {
         ) : null}
       </Block>
 
-      <Items title="Weapons" items={s.weapons} limit={era.limits.weapons} count={counts.weapons} onChange={(weapons) => set({ weapons })} showCs />
-      <Items title="Backpack" items={s.backpack} limit={era.limits.backpack} count={counts.backpack}
-        countNote={s.counters.meals ? `includes ${s.counters.meals} Meal${s.counters.meals > 1 ? 's' : ''}` : undefined}
-        onChange={(backpack) => applyItems(char, onChange, 'backpack', backpack)} showEp />
-      <Items title="Special Items" items={s.special} limit={era.limits.special} count={counts.special}
-        onChange={(special) => applyItems(char, onChange, 'special', special)} showCs showEp />
+      <Block title="Pack">
+        <Inventory char={char} onChange={onChange} />
+      </Block>
 
       <Block title="Counters">
         <div className="counters">
-          {[...era.counters, ...Object.keys(s.counters).filter((k) => !era.counters.some((c) => c.id === k)).map((k) => ({ id: k, label: k, max: undefined as number | undefined }))].map((c) => (
+          {[...era.counters.filter((c) => c.id !== 'gold' && c.id !== 'meals'), ...Object.keys(s.counters).filter((k) => !era.counters.some((c) => c.id === k) && k !== 'gold' && k !== 'meals').map((k) => ({ id: k, label: k, max: undefined as number | undefined }))].map((c) => (
             <div key={c.id} className="counter">
               <span>{c.label}{c.max ? <small> max {c.max}</small> : null}</span>
               <div className="stepper">
@@ -99,19 +96,6 @@ export default function ActionChart({ char, onChange, abilities = [] }: Props) {
       </Block>
     </div>
   )
-}
-
-/** Adding an item that raises ENDURANCE raises both the total and the current score; removing it lowers the total. */
-function applyItems(char: Character, onChange: Props['onChange'], key: 'backpack' | 'special', items: Item[]) {
-  const s = char.state
-  const next: CharState = { ...s, [key]: items }
-  const gained = maxEp(next) - maxEp(s)
-  next.ep = Math.max(0, Math.min(maxEp(next), s.ep + Math.max(0, gained)))
-  if (next.wpBase != null) {
-    const g = maxWp(next) - maxWp(s)
-    next.wp = Math.min(maxWp(next), (s.wp ?? 0) + Math.max(0, g))
-  }
-  onChange({ ...char, state: next })
 }
 
 function Stat({ label, value, sub, onStep, danger }: { label: string; value: number; sub?: string; onStep: (d: number) => void; danger?: boolean }) {
@@ -175,43 +159,6 @@ function TagList({ label, values, onChange, placeholder }: { label: string; valu
       <ul className="tags">{values.map((x, i) => <li key={i}>{x}<button onClick={() => onChange(values.filter((_, j) => j !== i))}>×</button></li>)}</ul>
       <div className="add-row"><input value={v} placeholder={placeholder} onChange={(e) => setV(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} /><button className="ghost small" onClick={add}>Add</button></div>
     </div>
-  )
-}
-
-function Items({ title, items, limit, count, countNote, onChange, showCs, showEp }: {
-  title: string; items: Item[]; limit?: number; count: number; countNote?: string; onChange: (i: Item[]) => void; showCs?: boolean; showEp?: boolean
-}) {
-  const [name, setName] = useState('')
-  const [open, setOpen] = useState<number | null>(null)
-  const over = limit != null && count > limit
-  const add = () => { if (name.trim()) { onChange([...items, { name: name.trim() }]); setName('') } }
-  return (
-    <section className="block">
-      <h4>{title} <small className={over ? 'over' : ''}>{count}{limit != null ? ` / ${limit}` : ''}{countNote ? ` · ${countNote}` : ''}</small></h4>
-      <ul className="items">
-        {items.map((it, i) => (
-          <li key={i}>
-            <button className="item-name" onClick={() => setOpen(open === i ? null : i)}>
-              {it.name}
-              {it.cs ? <em>{it.cs > 0 ? '+' : ''}{it.cs} CS</em> : null}
-              {it.ep ? <em>{it.ep > 0 ? '+' : ''}{it.ep} EP</em> : null}
-              {it.wp ? <em>{it.wp > 0 ? '+' : ''}{it.wp} WP</em> : null}
-            </button>
-            <button className="x" aria-label={`Remove ${it.name}`} onClick={() => onChange(items.filter((_, j) => j !== i))}>×</button>
-            {open === i ? (
-              <div className="item-edit">
-                <label>Name <input value={it.name} onChange={(e) => onChange(items.map((x, j) => j === i ? { ...x, name: e.target.value } : x))} /></label>
-                {showCs ? <label>CS <input type="number" inputMode="numeric" value={it.cs ?? 0} onChange={(e) => onChange(items.map((x, j) => j === i ? { ...x, cs: +e.target.value || undefined } : x))} /></label> : null}
-                {showEp ? <label>EP <input type="number" inputMode="numeric" value={it.ep ?? 0} onChange={(e) => onChange(items.map((x, j) => j === i ? { ...x, ep: +e.target.value || undefined } : x))} /></label> : null}
-                {showEp ? <label>WP <input type="number" inputMode="numeric" value={it.wp ?? 0} onChange={(e) => onChange(items.map((x, j) => j === i ? { ...x, wp: +e.target.value || undefined } : x))} /></label> : null}
-                <label className="full">Note <input value={it.note ?? ''} onChange={(e) => onChange(items.map((x, j) => j === i ? { ...x, note: e.target.value || undefined } : x))} /></label>
-              </div>
-            ) : it.note ? <div className="item-note">{it.note}</div> : null}
-          </li>
-        ))}
-      </ul>
-      <div className="add-row"><input value={name} placeholder={`Add to ${title}`} onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && add()} /><button className="ghost small" onClick={add}>Add</button></div>
-    </section>
   )
 }
 

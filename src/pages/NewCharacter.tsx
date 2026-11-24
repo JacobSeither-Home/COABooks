@@ -70,7 +70,6 @@ export default function NewCharacter() {
         <div className="eyebrow">{book?.title} · {era.label}</div>
         <h1 className="title">Name your {era.hero === 'Grand Master' ? 'Grand Master' : 'hero'}</h1>
         <input className="wide big-input" value={char.name} onChange={(e) => update({ ...char, name: e.target.value })} autoFocus />
-        {book?.pages.tssf ? <details className="rules"><summary>{book.pages.tssf.title}</summary><BookHtml bookId={book.id} html={book.pages.tssf.html} /></details> : null}
         <button className="primary block-btn" disabled={!char.name.trim()} onClick={() => setStep('stats')}>Next</button>
       </main>
     )
@@ -189,7 +188,7 @@ function makeChar(id: string): Character {
 
 function Begin({ char, onBegin }: { char: Character; onBegin: (c: Character) => void }) {
   const ready = useMemo(() => maxEp(char.state) > 0 && char.state.cs > 0, [char])
-  return <button className="primary block-btn sticky" disabled={!ready} onClick={() => onBegin(beginBook(char, char.book))}>Begin at section 1</button>
+  return <button className="primary block-btn sticky" disabled={!ready} onClick={() => onBegin(beginBook(char, char.book))}>Begin the adventure</button>
 }
 
 function WeaponInput({ values, onChange }: { values: string[]; onChange: (v: string[]) => void }) {

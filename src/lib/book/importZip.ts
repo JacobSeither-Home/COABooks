@@ -2,7 +2,8 @@
 // parsed, and saved, then dropped from memory before the next book. Nothing leaves the device.
 import { Unzip, UnzipInflate } from 'fflate'
 import { parseBook } from './parse'
-import { saveBook } from '../db'
+import { saveBook, saveIcons } from '../db'
+import { ICON_FILES } from '../items'
 
 export interface ImportProgress { bytes: number; total: number; books: string[]; current?: string }
 
@@ -33,6 +34,12 @@ export async function importZip(
         if (data) images.set(name, new Blob([data as BlobPart], { type: 'image/png' }))
       }
       await saveBook(parsed, images)
+      const icons = new Map<string, Blob>()
+      for (const name of ICON_FILES) {
+        const data = book.png.get(name)
+        if (data) icons.set(name, new Blob([data as BlobPart], { type: 'image/png' }))
+      }
+      if (icons.size) await saveIcons(icons)
       saved.push(parsed.id)
       onProgress({ bytes, total, books: saved })
     }).catch((e) => { failure ??= e })
