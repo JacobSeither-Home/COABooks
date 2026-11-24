@@ -1,8 +1,8 @@
 // One fight at a time: Combat Ratio from the Action Chart, a thrown die for each round, losses from
 // the book's Combat Results Table, applied straight to the Action Chart.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Enemy } from '../lib/book/parse'
-import { availableOptions, combatCs, maxEp, type Character } from '../lib/character'
+import { availableOptions, combatCs, maxEp, weaponMatches, type Character } from '../lib/character'
 import { eraOf, ratioColumn } from '../lib/rules/eras'
 import Dice from './Dice'
 
@@ -26,6 +26,22 @@ export default function Combat({ char, enemies, immune, onChange }: Props) {
   const [evade, setEvade] = useState(false)
   const [rounds, setRounds] = useState<Round[]>([])
   const [editing, setEditing] = useState(false)
+  const [hit, setHit] = useState<{ foe: string; hero: string; k: number } | null>(null)
+  const [jolt, setJolt] = useState(false)
+  useEffect(() => {
+    if (!hit || !(hit.hero.startsWith('−') || hit.hero === 'SLAIN')) return
+    setJolt(true)
+    const t = setTimeout(() => setJolt(false), 420)
+    return () => clearTimeout(t)
+  }, [hit])
+
+  // Go into a fight with a weapon in hand: a skilled one if there is one, else the first carried.
+  useEffect(() => {
+    if (s.wielding !== undefined && (s.wielding === '' || s.weapons.some((w) => w.name === s.wielding))) return
+    if (!s.weapons.length) return
+    const skilled = s.weapons.find((w) => s.weaponSkills.some((k) => weaponMatches(w.name, k)))
+    onChange({ ...char, state: { ...s, wielding: (skilled ?? s.weapons[0]).name } })
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   const foe = list[idx]
   const options = availableOptions(s, era)
@@ -58,6 +74,7 @@ export default function Combat({ char, enemies, immune, onChange }: Props) {
       setEnemyEp(nextEp)
     }
     setRounds((r) => [...r, { n: r.length + 1, rn, ratio, enemyLoss: evade ? 0 : eLoss, heroLoss: hLoss, extra, evaded: evade }])
+    setHit({ foe: evade ? '' : eLoss === 'K' ? 'SLAIN' : eLoss ? `−${eLoss}` : 'miss', hero: hLoss === 'K' ? 'SLAIN' : heroDrop ? `−${heroDrop}` : 'unhurt', k: Date.now() })
     onChange({ ...char, state: { ...s, ep, fought: true }, dead: ep <= 0 ? true : char.dead })
   }
 
@@ -70,7 +87,7 @@ export default function Combat({ char, enemies, immune, onChange }: Props) {
   const lastEvaded = rounds.at(-1)?.evaded
 
   return (
-    <section className="combat-panel">
+    <section className={`combat-panel ${jolt ? 'jolt' : ''}`}>
       <header className="combat-head">
         <div>
           <div className="eyebrow">Combat{list.length > 1 ? ` · ${idx + 1} of ${list.length}` : ''}</div>
@@ -92,16 +109,19 @@ export default function Combat({ char, enemies, immune, onChange }: Props) {
         <div className="side">
           <div className="who">{char.name}</div>
           <div className="big">{cs.total}<span>{era.stats[0].short}</span></div>
-          <div className="ep">{s.ep}<span>/{maxEp(s)} EP</span></div>
+          <Bar now={s.ep} max={maxEp(s)} />
+          {hit ? <span key={`h${hit.k}`} className={`float ${hit.hero.startsWith('−') || hit.hero === 'SLAIN' ? 'hurt' : 'calm'}`}>{hit.hero}</span> : null}
         </div>
         <div className="ratio">
+          <div className="vs">⚔</div>
           <div className="eyebrow">Ratio</div>
           <div className={`big ${ratio >= 0 ? 'good' : 'bad'}`}>{ratio > 0 ? `+${ratio}` : ratio}</div>
         </div>
         <div className="side right">
           <div className="who">{foe.name}</div>
           <div className="big">{foe.cs}<span>{era.stats[0].short}</span></div>
-          <div className="ep">{Math.max(0, enemyEp[idx])}<span>/{foe.ep} EP</span></div>
+          <Bar now={Math.max(0, enemyEp[idx])} max={foe.ep} foe />
+          {hit && hit.foe ? <span key={`f${hit.k}`} className={`float ${hit.foe === 'miss' ? 'calm' : 'dealt'}`}>{hit.foe}</span> : null}
         </div>
       </div>
 
@@ -163,5 +183,15 @@ export default function Combat({ char, enemies, immune, onChange }: Props) {
         </ol>
       ) : null}
     </section>
+  )
+}
+
+function Bar({ now, max, foe }: { now: number; max: number; foe?: boolean }) {
+  const pct = Math.max(0, Math.min(100, (now / Math.max(1, max)) * 100))
+  return (
+    <div className={`hp ${foe ? 'foe' : ''}`}>
+      <div className="hp-track"><i style={{ width: `${pct}%` }} className={pct < 30 ? 'low' : ''} /></div>
+      <div className="hp-num"><b>{now}</b>/{max}</div>
+    </div>
   )
 }

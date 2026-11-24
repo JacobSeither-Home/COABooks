@@ -1,6 +1,6 @@
 // On-device storage for imported books (IndexedDB). Shared by every account on this device, so a
 // second reader doesn't need their own copy of the files.
-import type { Book } from './book/parse'
+import { coverOf, type Book } from './book/parse'
 
 const DB = 'coabooks'
 let opening: Promise<IDBDatabase> | null = null
@@ -38,8 +38,15 @@ export async function saveBook(book: Book, images: Map<string, Blob>) {
   for (const [name, blob] of images) store.put(blob, `${book.id}/${name}`)
   await done(tx)
   bookCache.set(book.id, book)
+  const index = readIndex() ?? []
+  writeIndex([...index.filter((b) => b.id !== book.id), summary(book)])
   listeners.forEach((f) => f())
 }
+
+const INDEX = 'coa.library'
+const summary = (b: Book): BookSummary => ({ id: b.id, title: b.title, order: b.order, lastSection: b.lastSection, cover: b.cover ?? coverOf(b.images) })
+function readIndex(): BookSummary[] | null { try { return JSON.parse(localStorage.getItem(INDEX) ?? 'null') } catch { return null } }
+function writeIndex(list: BookSummary[]) { try { localStorage.setItem(INDEX, JSON.stringify(list)) } catch { /* full */ } }
 
 const bookCache = new Map<string, Book>()
 
@@ -51,9 +58,11 @@ export async function getBook(id: string): Promise<Book | undefined> {
   return b
 }
 
-export interface BookSummary { id: string; title: string; order: number; lastSection: number }
+export interface BookSummary { id: string; title: string; order: number; lastSection: number; cover?: string }
 
 export async function listBooks(): Promise<BookSummary[]> {
+  const cached = readIndex()
+  if (cached) return [...cached].sort((a, b) => a.order - b.order)
   const db = await open()
   const out: BookSummary[] = []
   await new Promise<void>((resolve, reject) => {
@@ -62,11 +71,12 @@ export async function listBooks(): Promise<BookSummary[]> {
       const c = req.result
       if (!c) return resolve()
       const b = c.value as Book
-      out.push({ id: b.id, title: b.title, order: b.order, lastSection: b.lastSection })
+      out.push(summary(b))
       c.continue()
     }
     req.onerror = () => reject(req.error)
   })
+  writeIndex(out)
   return out.sort((a, b) => a.order - b.order)
 }
 
@@ -88,6 +98,7 @@ export async function clearBooks() {
   tx.objectStore('books').clear(); tx.objectStore('images').clear()
   await done(tx)
   bookCache.clear()
+  writeIndex([])
   listeners.forEach((f) => f())
 }
 

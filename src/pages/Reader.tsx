@@ -4,7 +4,7 @@ import ActionChart from '../components/ActionChart'
 import BookHtml from '../components/BookHtml'
 import Combat from '../components/Combat'
 import Dice from '../components/Dice'
-import { abilityNames, baseCs, enterSection, maxEp, nextBookId, type Character } from '../lib/character'
+import { abilityNames, baseCs, enterSection, maxEp, maxWp, nextBookId, type Character } from '../lib/character'
 import { useBook, useLibrary } from '../lib/hooks'
 import { eraOf } from '../lib/rules/eras'
 import { saveCharacter, useCharacter } from '../lib/store'
@@ -67,7 +67,7 @@ export default function Reader() {
   const dead = char.dead || s.ep <= 0
 
   return (
-    <div className="reader">
+    <div className="reader" data-series={era.series}>
       <div ref={top} />
       <header className="bar">
         <Link to="/" className="icon-btn" aria-label="Library">‹</Link>
@@ -81,63 +81,71 @@ export default function Reader() {
         </button>
       </header>
 
-      <main className="section">
+      <div className="spread" key={`${char.book}-${char.section}`}>
         {sec ? (
           <>
-            <h2 className="sect-num">{n}</h2>
-            <BookHtml bookId={book.id} html={story} onSection={go} onPage={(p) => setSheet({ page: p })}
-              abilities={book.abilities} owned={abilityNames(s)} />
+            <article className="leaf leaf-story">
+              <div className="seal"><span>{n}</span></div>
+              <BookHtml bookId={book.id} html={story} onSection={go} onPage={(p) => setSheet({ page: p })}
+                abilities={book.abilities} owned={abilityNames(s)} />
+            </article>
+            <aside className="leaf leaf-act">
+              {sec.combats.length || fight ? (
+                <Combat key={`${char.book}-${n}`} char={char} enemies={sec.combats} immune={!!sec.immune} onChange={save} />
+              ) : null}
 
-            {sec.combats.length || fight ? (
-              <Combat key={`${char.book}-${n}`} char={char} enemies={sec.combats} immune={!!sec.immune} onChange={save} />
-            ) : (
-              <button className="link add-fight" onClick={() => setFight(true)}>Fight here</button>
-            )}
+              {sec.random ? (
+                <section className="inline-dice">
+                  <div className="eyebrow">Random Number Table</div>
+                  <Dice onRoll={setLastRoll} prompt="Throw for the number the text asks for" height={150} />
+                  {lastRoll != null ? <p className="rolled-num">You threw <b>{lastRoll}</b></p> : null}
+                </section>
+              ) : null}
 
-            {sec.random ? (
-              <section className="inline-dice">
-                <div className="eyebrow">Random Number Table</div>
-                <Dice onRoll={setLastRoll} prompt="Throw for the number the text asks for" height={140} />
-                {lastRoll != null ? <p className="rolled-num">You threw <b>{lastRoll}</b></p> : null}
-              </section>
-            ) : null}
+              {choices ? (
+                <BookHtml bookId={book.id} html={choices} onSection={go} onPage={(p) => setSheet({ page: p })}
+                  abilities={book.abilities} owned={abilityNames(s)} className="choices" />
+              ) : null}
 
-            {choices ? (
-              <BookHtml bookId={book.id} html={choices} onSection={go} onPage={(p) => setSheet({ page: p })}
-                abilities={book.abilities} owned={abilityNames(s)} className="choices" />
-            ) : null}
+              {dead ? (
+                <section className="ending bad">
+                  <div className="ending-mark">☠</div>
+                  <h3>Your adventure ends here</h3>
+                  <div className="stack">
+                    {char.start ? <button className="primary" onClick={restartBook}>Start {book.title} again</button> : null}
+                    {char.history.length > 1 ? <button className="ghost" onClick={() => { save({ ...char, dead: false, state: { ...s, ep: Math.max(1, s.ep) } }); goBack() }}>Go back one section</button> : null}
+                  </div>
+                  <p className="note">Starting again restores the Action Chart from the start of this book.</p>
+                </section>
+              ) : sec.end === 'death' ? (
+                <section className="ending bad">
+                  <div className="ending-mark">☠</div>
+                  <h3>Your adventure ends here</h3>
+                  <div className="stack">
+                    {char.start ? <button className="primary" onClick={restartBook}>Start {book.title} again</button> : null}
+                    <button className="ghost" onClick={goBack}>Go back one section</button>
+                  </div>
+                </section>
+              ) : sec.end === 'win' ? (
+                <section className="ending good">
+                  <div className="ending-mark">✦</div>
+                  <h3>{book.title} complete</h3>
+                  {nextId ? <button className="primary glow" onClick={() => nav(`/next/${char.id}`)}>Carry on to the next book</button>
+                    : <p className="note">{char.book.endsWith('dotd') ? 'This is a stand-alone adventure.' : 'The next book isn’t on this device, or this is the last one.'}</p>}
+                </section>
+              ) : sec.end === 'end' ? (
+                <p className="note center">No link onward here. If the text gives you a number, enter it below.</p>
+              ) : null}
 
-            {dead ? (
-              <section className="ending bad">
-                <h3>Your adventure ends here</h3>
-                <div className="stack">
-                  {char.start ? <button className="primary" onClick={restartBook}>Start {book.title} again</button> : null}
-                  {char.history.length > 1 ? <button className="ghost" onClick={() => { save({ ...char, dead: false, state: { ...s, ep: Math.max(1, s.ep) } }); goBack() }}>Go back one section</button> : null}
-                </div>
-                <p className="note">Starting again restores the Action Chart from the start of this book.</p>
-              </section>
-            ) : sec.end === 'death' ? (
-              <section className="ending bad">
-                <h3>Your adventure ends here</h3>
-                <div className="stack">
-                  {char.start ? <button className="primary" onClick={restartBook}>Start {book.title} again</button> : null}
-                  <button className="ghost" onClick={goBack}>Go back one section</button>
-                </div>
-              </section>
-            ) : sec.end === 'win' ? (
-              <section className="ending good">
-                <h3>{book.title} complete</h3>
-                {nextId ? <button className="primary" onClick={() => nav(`/next/${char.id}`)}>Carry on to the next book</button>
-                  : <p className="note">{char.book.endsWith('dotd') ? 'This is a stand-alone adventure.' : 'The next book isn’t on this device, or this is the last one.'}</p>}
-              </section>
-            ) : sec.end === 'end' ? (
-              <p className="note center">No link onward here. If the text gives you a number, enter it below.</p>
-            ) : null}
+              {!sec.combats.length && !fight ? <button className="link add-fight" onClick={() => setFight(true)}>⚔ Fight here</button> : null}
+
+              <ChartGlance char={char} onOpen={() => setSheet('chart')} />
+            </aside>
           </>
         ) : (
-          <p>Section {char.section} isn’t in this book.</p>
+          <p className="leaf">Section {char.section} isn’t in this book.</p>
         )}
-      </main>
+      </div>
 
       <nav className="dock">
         <button className="icon-btn" onClick={goBack} disabled={char.history.length < 2} aria-label="Previous section">↶</button>
@@ -180,5 +188,31 @@ export default function Reader() {
         </div>
       ) : null}
     </div>
+  )
+}
+
+/** On the unfolded screen: the Action Chart at a glance beside the story. */
+function ChartGlance({ char, onOpen }: { char: Character; onOpen: () => void }) {
+  const s = char.state
+  const era = eraOf(char.book)
+  const max = maxEp(s)
+  const pct = Math.max(0, Math.min(100, (s.ep / Math.max(1, max)) * 100))
+  return (
+    <button className="glance" onClick={onOpen}>
+      <div className="glance-head"><span className="eyebrow">Action Chart</span><span className="link small">Open ›</span></div>
+      <div className="glance-stats">
+        <div className="medal big"><span>{era.stats[0].short}</span><b>{baseCs(s)}</b></div>
+        <div className="glance-ep">
+          <div className="ep-line"><span className="ep-bar"><i style={{ width: `${pct}%` }} className={pct < 30 ? 'low' : ''} /></span><b>{s.ep}</b>/{max} EP</div>
+          {s.wpBase != null ? <div className="ep-line wp"><span className="ep-bar"><i style={{ width: `${Math.max(0, Math.min(100, ((s.wp ?? 0) / Math.max(1, maxWp(s))) * 100))}%` }} /></span><b>{s.wp}</b>/{maxWp(s)} WP</div> : null}
+        </div>
+      </div>
+      {s.abilities.length ? <div className="glance-row"><span>{era.abilityLabel}</span>{s.abilities.map((a) => a.name.replace(/\s*\(.*\)$/, '')).join(' · ')}</div> : null}
+      {Object.keys(s.skills).length ? <div className="glance-row"><span>{era.abilityLabel}</span>{Object.entries(s.skills).map(([k, v]) => `${k} ${v}`).join(' · ')}</div> : null}
+      {s.weapons.length ? <div className="glance-row"><span>Weapons</span>{s.weapons.map((w) => w.name).join(' · ')}</div> : null}
+      {s.backpack.length ? <div className="glance-row"><span>Backpack</span>{s.backpack.map((w) => w.name).join(' · ')}</div> : null}
+      {s.special.length ? <div className="glance-row"><span>Special</span>{s.special.map((w) => w.name).join(' · ')}</div> : null}
+      <div className="glance-row counters">{era.counters.map((c) => <span key={c.id}>{c.label} <b>{s.counters[c.id] ?? 0}</b></span>)}</div>
+    </button>
   )
 }

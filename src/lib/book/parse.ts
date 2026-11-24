@@ -34,6 +34,8 @@ export interface Book {
   abilities: string[]
   /** Image files the html refers to (data-img). */
   images: string[]
+  /** The book's first illustration, used as its cover in the library. */
+  cover?: string
   importedAt: number
 }
 
@@ -207,5 +209,12 @@ export function parseBook(id: string, files: Map<string, string>, parseHtml: Par
   if (sections[lastSection] && !sections[lastSection].choices.length) sections[lastSection].end = 'win'
   const [series, dir] = id.split('/')
   const order = (dir === 'dotd' ? ORDER.dd : ORDER[series] ?? 900) + (parseInt(dir, 10) || 0)
-  return { id, title, order, sections, lastSection, pages, pageOrder, abilities, images: [...images], importedAt: Date.now() }
+  return { id, title, order, sections, lastSection, pages, pageOrder, abilities, images: [...images], cover: coverOf([...images]), importedAt: Date.now() }
+}
+
+/** Lowest-numbered illustration: Lone Wolf sections use smallN.png, the older books illN.png. */
+export function coverOf(images: string[]): string | undefined {
+  const num = (f: string) => parseInt(/(\d+)/.exec(f)?.[1] ?? '999', 10)
+  const ill = images.filter((f) => /^(ill|small)\d+\.png$/i.test(f)).sort((a, b) => num(a) - num(b))
+  return ill[0]
 }
